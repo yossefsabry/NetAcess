@@ -40,6 +40,8 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.compose.viewModel
 import coil.compose.AsyncImage
+import coil.request.CachePolicy
+import coil.request.ImageRequest
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 import androidx.compose.ui.res.painterResource
@@ -299,7 +301,11 @@ fun MainScreen(isDarkMode: Boolean, onToggleTheme: () -> Unit) {
             modifier = Modifier.padding(padding),
             contentPadding = PaddingValues(bottom = 16.dp)
         ) {
-            items(filteredApps, key = { it.packageName }) { app ->
+            items(
+                items = filteredApps,
+                key = { it.packageName },
+                contentType = { "app" }
+            ) { app ->
                 val rule = rules.find { it.packageName == app.packageName } ?: Rule(app.packageName, app.name, app.uid)
                 AppRuleItem(app, rule, onUpdate = { viewModel.updateRule(it) })
             }
@@ -335,7 +341,14 @@ fun AppRuleItem(app: AppMetadata, rule: Rule, onUpdate: (Rule) -> Unit) {
                 leadingContent = {
                     if (appIcon != null) {
                         AsyncImage(
-                            model = appIcon,
+                            model = ImageRequest.Builder(context)
+                                .data(appIcon)
+                                .crossfade(true)
+                                .diskCachePolicy(CachePolicy.ENABLED)
+                                .memoryCachePolicy(CachePolicy.ENABLED)
+                                .placeholder(null)
+                                .error(null)
+                                .build(),
                             contentDescription = null,
                             modifier = Modifier.size(44.dp).padding(2.dp)
                         )
