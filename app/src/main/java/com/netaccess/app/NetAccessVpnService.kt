@@ -39,6 +39,7 @@ class NetAccessVpnService : VpnService() {
     companion object {
         private const val TAG = "NetAccessVPN"
         const val ACTION_RELOAD = "com.netaccess.app.RELOAD"
+        const val ACTION_STOP = "com.netaccess.app.STOP"
         const val NOTIFICATION_ID = 1001
         const val CHANNEL_ID = "netaccess_vpn_channel"
 
@@ -71,8 +72,29 @@ class NetAccessVpnService : VpnService() {
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        if (intent?.action == ACTION_STOP) {
+            stopVpn()
+            return START_NOT_STICKY
+        }
         debounceReload()
         return START_STICKY
+    }
+
+    private fun stopVpn() {
+        drainJob?.cancel()
+        drainJob = null
+        vpnInterface?.close()
+        vpnInterface = null
+        lastBlockedPackages = null
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+            stopForeground(STOP_FOREGROUND_REMOVE)
+        } else {
+            @Suppress("DEPRECATION")
+            stopForeground(true)
+        }
+        _isRunning.value = false
+        stopSelf()
     }
 
     private fun observeRules() {
