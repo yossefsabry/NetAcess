@@ -56,7 +56,7 @@ class NetAccessVpnService : VpnService() {
             startForeground(
                 NOTIFICATION_ID,
                 notification,
-                ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE
+                ServiceInfo.FOREGROUND_SERVICE_TYPE_VPN
             )
         } else {
             startForeground(NOTIFICATION_ID, notification)
@@ -240,13 +240,11 @@ class NetAccessVpnService : VpnService() {
                 val inputStream = FileInputStream(pfd.fileDescriptor)
                 while (isActive) {
                     val n = inputStream.read(buffer)
-                    if (n <= 0) break // tunnel closed
-                    // Packets are silently discarded — this is the "sinkhole" firewall behavior
+                    if (n <= 0) break
                 }
-            } catch (_: Exception) {
-                // Expected when VPN is torn down or revoked
+            } catch (e: Exception) {
+                Log.e(TAG, "Tunnel read error", e)
             }
-            Log.i(TAG, "Drain tunnel exited")
         }
     }
 
