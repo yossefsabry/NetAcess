@@ -203,10 +203,14 @@ class NetAccessVpnService : VpnService() {
             val builder = Builder()
                 .setSession("NetAccess")
                 .addAddress("10.0.0.2", 32)
+                .addAddress("fd00:1::2", 128)
                 .addRoute("0.0.0.0", 0)
+                .addRoute("::", 0)
                 .setMtu(1500)
                 .addDnsServer("8.8.8.8")
                 .addDnsServer("8.8.4.4")
+                .addDnsServer("2001:4860:4860::8888")
+                .addDnsServer("2001:4860:4860::8844")
 
             // CRITICAL: Exclude ourselves to prevent recursive VPN routing
             try {
