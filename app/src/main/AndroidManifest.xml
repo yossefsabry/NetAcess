@@ -51,6 +51,18 @@
             android:label="App Features"
             android:theme="@style/Theme.NetZone" />
 
+        <activity
+            android:name=".AboutActivity"
+            android:exported="false"
+            android:label="About"
+            android:theme="@style/Theme.NetZone" />
+
+        <activity
+            android:name=".SupportActivity"
+            android:exported="false"
+            android:label="Support"
+            android:theme="@style/Theme.NetZone" />
+
         <service
             android:name=".NetZoneVpnService"
             android:permission="android.permission.BIND_VPN_SERVICE"

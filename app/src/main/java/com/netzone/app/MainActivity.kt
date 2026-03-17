@@ -120,8 +120,6 @@ fun MainScreen(preferenceManager: PreferenceManager, isDarkMode: Boolean, onTogg
     var isStarting by remember { mutableStateOf(false) }
     var showMenu by remember { mutableStateOf(false) }
     var showLegend by remember { mutableStateOf(false) }
-    var showSupport by remember { mutableStateOf(false) }
-    var showAbout by remember { mutableStateOf(false) }
     
     LaunchedEffect(isVpnRunning) {
         isStarting = false
@@ -263,15 +261,15 @@ fun MainScreen(preferenceManager: PreferenceManager, isDarkMode: Boolean, onTogg
                                 DropdownMenuItem(
                                     text = { Text("Support", style = MaterialTheme.typography.bodyLarge) },
                                     onClick = { 
-                                        showSupport = true
                                         showMenu = false 
+                                        context.startActivity(Intent(context, SupportActivity::class.java))
                                     }
                                 )
                                 DropdownMenuItem(
                                     text = { Text("About", style = MaterialTheme.typography.bodyLarge) },
                                     onClick = { 
-                                        showAbout = true
                                         showMenu = false 
+                                        context.startActivity(Intent(context, AboutActivity::class.java))
                                     }
                                 )
                             }
@@ -397,36 +395,6 @@ fun MainScreen(preferenceManager: PreferenceManager, isDarkMode: Boolean, onTogg
             },
             confirmButton = {
                 TextButton(onClick = { showLegend = false }) { Text("Close") }
-            }
-        )
-    }
-
-    if (showSupport) {
-        AlertDialog(
-            onDismissRequest = { showSupport = false },
-            title = { Text("Support") },
-            text = {
-                Text("For any issues or feedback, please contact support@netzone.app or visit our GitHub repository.")
-            },
-            confirmButton = {
-                TextButton(onClick = { showSupport = false }) { Text("Close") }
-            }
-        )
-    }
-
-    if (showAbout) {
-        AlertDialog(
-            onDismissRequest = { showAbout = false },
-            title = { Text("About NetZone") },
-            text = {
-                Column {
-                    Text("Version 1.0.0")
-                    Spacer(modifier = Modifier.height(8.dp))
-                    Text("NetZone is a simple firewall application for Android, based on the sinkhole VPN approach.")
-                }
-            },
-            confirmButton = {
-                TextButton(onClick = { showAbout = false }) { Text("Close") }
             }
         )
     }
