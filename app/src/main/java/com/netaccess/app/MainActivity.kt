@@ -182,6 +182,7 @@ fun MainScreen(isDarkMode: Boolean, onToggleTheme: () -> Unit) {
     val searchQuery by viewModel.searchQuery.collectAsStateWithLifecycle()
     val showOnlyBlocked by viewModel.showOnlyBlocked.collectAsStateWithLifecycle()
     val showOnlySystem by viewModel.showOnlySystem.collectAsStateWithLifecycle()
+    val isVpnRunning by NetAccessVpnService.isRunning.collectAsStateWithLifecycle()
     
     val vpnLauncher = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
         if (result.resultCode == ComponentActivity.RESULT_OK) {
@@ -216,11 +217,19 @@ fun MainScreen(isDarkMode: Boolean, onToggleTheme: () -> Unit) {
                             )
                         }
                         IconButton(onClick = {
-                            val intent = VpnService.prepare(context)
-                            if (intent != null) vpnLauncher.launch(intent)
-                            else context.startService(Intent(context, NetAccessVpnService::class.java))
+                            if (isVpnRunning) {
+                                context.stopService(Intent(context, NetAccessVpnService::class.java))
+                            } else {
+                                val intent = VpnService.prepare(context)
+                                if (intent != null) vpnLauncher.launch(intent)
+                                else context.startService(Intent(context, NetAccessVpnService::class.java))
+                            }
                         }) {
-                            Icon(Icons.Default.PowerSettingsNew, contentDescription = "Start VPN", tint = Color(0xFF4CAF50))
+                            Icon(
+                                Icons.Default.PowerSettingsNew, 
+                                contentDescription = if (isVpnRunning) "Stop VPN" else "Start VPN", 
+                                tint = if (isVpnRunning) MaterialTheme.colorScheme.error else Color(0xFF4CAF50)
+                            )
                         }
                     }
                 )
