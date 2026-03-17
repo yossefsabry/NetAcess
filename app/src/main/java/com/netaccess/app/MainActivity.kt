@@ -218,7 +218,7 @@ fun MainScreen(isDarkMode: Boolean, onToggleTheme: () -> Unit) {
                         }
                         IconButton(onClick = {
                             if (isVpnRunning) {
-                                context.stopService(Intent(context, NetAccessVpnService::class.java))
+                                context.startService(Intent(context, NetAccessVpnService::class.java).apply { action = NetAccessVpnService.ACTION_STOP })
                             } else {
                                 val intent = VpnService.prepare(context)
                                 if (intent != null) vpnLauncher.launch(intent)
