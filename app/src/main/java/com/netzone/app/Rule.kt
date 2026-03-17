@@ -18,5 +18,7 @@ data class Rule(
     val endTimeMinutes: Int? = null,
     val isScheduleEnabled: Boolean = false,
     val daysToBlock: Int = 0b1111111, // Sun-Sat bitmask
-    val dailyLimitMinutes: Int = 0 // 0 = No limit
+    val dailyLimitMinutes: Int = 0, // 0 = No limit
+    val blockedIPs: String = "",
+    val blockedPorts: String = ""
 )

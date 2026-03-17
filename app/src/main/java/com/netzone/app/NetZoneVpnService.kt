@@ -24,11 +24,14 @@ class NetZoneVpnService : VpnService() {
     private var isConnected = false
     private var isWiFi = false
     private var isMobile = false
+    private var isScreenOn = true
     private var lastBlockedPackages: Set<String>? = null
 
     // Cached instances to avoid allocation churn
     private lateinit var repository: RuleRepository
     private lateinit var usageTracker: UsageTracker
+    private lateinit var preferenceManager: PreferenceManager
+    private lateinit var logDao: LogDao
 
     // Drain job reads/discards packets from tunnel fd to prevent buffer overflow
     private var drainJob: Job? = null
@@ -45,6 +48,11 @@ class NetZoneVpnService : VpnService() {
 
         private val _isRunning = MutableStateFlow(false)
         val isRunning: StateFlow<Boolean> = _isRunning.asStateFlow()
+
+        private val _uploadSpeed = MutableStateFlow(0L)
+        val uploadSpeed: StateFlow<Long> = _uploadSpeed.asStateFlow()
+
+        private val totalBytesRead = java.util.concurrent.atomic.AtomicLong(0L)
     }
 
     override fun onCreate() {
@@ -52,6 +60,8 @@ class NetZoneVpnService : VpnService() {
         val db = AppDatabase.getDatabase(this)
         repository = RuleRepository.getInstance(db.ruleDao())
         usageTracker = UsageTracker(this)
+        preferenceManager = PreferenceManager(this)
+        logDao = db.logDao()
 
         createNotificationChannel()
 
@@ -71,6 +81,35 @@ class NetZoneVpnService : VpnService() {
 
         observeNetwork()
         observeRules()
+        observePreferences()
+        observeScreenState()
+        startSpeedMonitor()
+    }
+
+    private fun observeScreenState() {
+        val filter = android.content.IntentFilter().apply {
+            addAction(Intent.ACTION_SCREEN_OFF)
+            addAction(Intent.ACTION_SCREEN_ON)
+        }
+        val receiver = object : android.content.BroadcastReceiver() {
+            override fun onReceive(context: Context?, intent: Intent?) {
+                isScreenOn = intent?.action == Intent.ACTION_SCREEN_ON
+                debounceReload()
+            }
+        }
+        registerReceiver(receiver, filter)
+    }
+
+    private fun startSpeedMonitor() {
+        serviceScope.launch {
+            var lastBytes = 0L
+            while (isActive) {
+                delay(1000)
+                val currentBytes = totalBytesRead.get()
+                _uploadSpeed.value = currentBytes - lastBytes
+                lastBytes = currentBytes
+            }
+        }
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -101,6 +140,16 @@ class NetZoneVpnService : VpnService() {
 
     private fun observeRules() {
         repository.rulesMap
+            .onEach { debounceReload() }
+            .launchIn(serviceScope)
+    }
+
+    private fun observePreferences() {
+        preferenceManager.isLockdown
+            .onEach { debounceReload() }
+            .launchIn(serviceScope)
+
+        preferenceManager.customDns
             .onEach { debounceReload() }
             .launchIn(serviceScope)
     }
@@ -139,6 +188,8 @@ class NetZoneVpnService : VpnService() {
 
     private suspend fun reloadRules() {
         val rules = repository.rulesMap.value.values
+        val isLockdown = preferenceManager.isLockdown.first()
+        val blockScreenOff = preferenceManager.blockWhenScreenOff.first()
         val now = Calendar.getInstance()
         val currentDayOfWeek = now.get(Calendar.DAY_OF_WEEK) // 1=Sun, 2=Mon...
         val dayMask = 1 shl (currentDayOfWeek - 1)
@@ -147,34 +198,55 @@ class NetZoneVpnService : VpnService() {
         // Reuse cached usageTracker instead of creating a new one every time
         val allUsage = usageTracker.getAllTodayUsageMinutes()
         val blockedPackages = mutableListOf<String>()
+        val blockedAppDetails = mutableListOf<Rule>()
 
         for (rule in rules) {
-            if (!rule.isEnabled) continue
-
             var shouldBlock = false
 
-            // Per-network blocking
-            if (isWiFi && rule.wifiBlocked) shouldBlock = true
-            if (isMobile && rule.mobileBlocked) shouldBlock = true
+            if (isLockdown || (blockScreenOff && !isScreenOn)) {
+                shouldBlock = true
+            } else {
+                if (!rule.isEnabled) continue
 
-            // Schedule blocking
-            if (!shouldBlock && rule.isScheduleEnabled && rule.startTimeMinutes != null && rule.endTimeMinutes != null) {
-                val isDaySelected = (rule.daysToBlock and dayMask) != 0
-                if (isDaySelected && isCurrentTimeInRange(currentMinutes, rule.startTimeMinutes, rule.endTimeMinutes)) {
-                    shouldBlock = true
+                // Per-network blocking
+                if (isWiFi && rule.wifiBlocked) shouldBlock = true
+                if (isMobile && rule.mobileBlocked) shouldBlock = true
+
+                // Schedule blocking
+                if (!shouldBlock && rule.isScheduleEnabled && rule.startTimeMinutes != null && rule.endTimeMinutes != null) {
+                    val isDaySelected = (rule.daysToBlock and dayMask) != 0
+                    if (isDaySelected && isCurrentTimeInRange(currentMinutes, rule.startTimeMinutes, rule.endTimeMinutes)) {
+                        shouldBlock = true
+                    }
                 }
-            }
 
-            // Daily usage limit
-            if (!shouldBlock && rule.dailyLimitMinutes > 0) {
-                val usage = allUsage[rule.packageName] ?: 0
-                if (usage >= rule.dailyLimitMinutes) {
-                    shouldBlock = true
+                // Daily usage limit
+                if (!shouldBlock && rule.dailyLimitMinutes > 0) {
+                    val usage = allUsage[rule.packageName] ?: 0
+                    if (usage >= rule.dailyLimitMinutes) {
+                        shouldBlock = true
+                    }
                 }
             }
 
             if (shouldBlock) {
                 blockedPackages.add(rule.packageName)
+                blockedAppDetails.add(rule)
+            }
+        }
+
+        // Log blocked apps for the Access Log screen (only when they change)
+        val blockedSet = blockedPackages.toSet()
+        if (blockedSet != lastBlockedPackages && blockedSet.isNotEmpty()) {
+            serviceScope.launch(Dispatchers.IO) {
+                blockedAppDetails.forEach { rule ->
+                    logDao.insert(LogEntry(
+                        packageName = rule.packageName,
+                        appName = rule.appName,
+                        uid = rule.uid,
+                        blocked = true
+                    ))
+                }
             }
         }
 
@@ -185,6 +257,8 @@ class NetZoneVpnService : VpnService() {
 
     private fun updateVpn(blockedPackages: List<String>) {
         val blockedSet = blockedPackages.toSet()
+        val customDns = runBlocking { preferenceManager.customDns.first() }
+
         if (vpnInterface != null && blockedSet == lastBlockedPackages) {
             return
         }
@@ -209,10 +283,20 @@ class NetZoneVpnService : VpnService() {
                 .addRoute("0.0.0.0", 0)
                 .addRoute("::", 0)
                 .setMtu(1500)
-                .addDnsServer("8.8.8.8")
-                .addDnsServer("8.8.4.4")
-                .addDnsServer("2001:4860:4860::8888")
-                .addDnsServer("2001:4860:4860::8844")
+
+            // Apply custom DNS
+            try {
+                if (customDns.contains(":")) {
+                    builder.addDnsServer(customDns)
+                } else {
+                    builder.addDnsServer(customDns)
+                    // Add secondary common DNS if only one is provided
+                    if (customDns == "8.8.8.8") builder.addDnsServer("8.8.4.4")
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "Invalid DNS: $customDns", e)
+                builder.addDnsServer("8.8.8.8")
+            }
 
             // CRITICAL: Exclude ourselves to prevent recursive VPN routing
             try {
@@ -273,10 +357,43 @@ class NetZoneVpnService : VpnService() {
                 while (isActive) {
                     val n = inputStream.read(buffer)
                     if (n <= 0) break
+                    
+                    totalBytesRead.addAndGet(n.toLong())
+                    
+                    // Parse packet for logging
+                    val parsed = PacketParser.parse(buffer, n)
+                    if (parsed != null) {
+                        logConnection(parsed)
+                    }
                 }
             } catch (e: Exception) {
                 Log.e(TAG, "Tunnel read error", e)
             }
+        }
+    }
+
+    private fun logConnection(packet: ParsedPacket) {
+        serviceScope.launch(Dispatchers.IO) {
+            // Heuristic: log which app is likely sending to the sinkhole
+            val rules = repository.rulesMap.value.values
+            val possibleApp = rules.firstOrNull { it.wifiBlocked || it.mobileBlocked || it.isScheduleEnabled }
+            
+            logDao.insert(LogEntry(
+                packageName = possibleApp?.packageName ?: "Unknown",
+                appName = possibleApp?.appName ?: "Network Traffic",
+                uid = possibleApp?.uid ?: 0,
+                protocol = when(packet.protocol) {
+                    6 -> "TCP"
+                    17 -> "UDP"
+                    1 -> "ICMP"
+                    else -> "Prot:${packet.protocol}"
+                },
+                sourceAddress = packet.sourceAddress,
+                sourcePort = packet.sourcePort,
+                destinationAddress = packet.destinationAddress,
+                destinationPort = packet.destinationPort,
+                blocked = true
+            ))
         }
     }
 

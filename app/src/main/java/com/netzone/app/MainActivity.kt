@@ -75,6 +75,7 @@ class MainActivity : ComponentActivity() {
             NetZoneTheme(isDark = isDarkMode) {
                 Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
                     MainScreen(
+                        preferenceManager = preferenceManager,
                         isDarkMode = isDarkMode,
                         onToggleTheme = {
                             coroutineScope.launch {
@@ -91,17 +92,18 @@ class MainActivity : ComponentActivity() {
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun MainScreen(isDarkMode: Boolean, onToggleTheme: () -> Unit) {
+fun MainScreen(preferenceManager: PreferenceManager, isDarkMode: Boolean, onToggleTheme: () -> Unit) {
     val context = LocalContext.current
     val db = AppDatabase.getDatabase(context)
     val repository = RuleRepository.getInstance(db.ruleDao())
+    val coroutineScope = rememberCoroutineScope()
     
     val viewModel: MainViewModel = viewModel(
         factory = object : ViewModelProvider.Factory {
             @Suppress("UNCHECKED_CAST")
             override fun <T : ViewModel> create(modelClass: Class<T>): T {
                 if (modelClass.isAssignableFrom(MainViewModel::class.java)) {
-                    return MainViewModel(repository, context.packageManager, db.appMetadataDao()) as T
+                    return MainViewModel(repository, context.packageManager, db.appMetadataDao(), preferenceManager) as T
                 }
                 throw IllegalArgumentException("Unknown ViewModel class")
             }
@@ -113,9 +115,13 @@ fun MainScreen(isDarkMode: Boolean, onToggleTheme: () -> Unit) {
     val searchQuery by viewModel.searchQuery.collectAsStateWithLifecycle()
     val showOnlyBlocked by viewModel.showOnlyBlocked.collectAsStateWithLifecycle()
     val showOnlySystem by viewModel.showOnlySystem.collectAsStateWithLifecycle()
+    val isLockdown by preferenceManager.isLockdown.collectAsStateWithLifecycle(initialValue = false)
     val isVpnRunning by NetZoneVpnService.isRunning.collectAsStateWithLifecycle(initialValue = false)
     var isStarting by remember { mutableStateOf(false) }
     var showMenu by remember { mutableStateOf(false) }
+    var showLegend by remember { mutableStateOf(false) }
+    var showSupport by remember { mutableStateOf(false) }
+    var showAbout by remember { mutableStateOf(false) }
     
     LaunchedEffect(isVpnRunning) {
         isStarting = false
@@ -215,35 +221,58 @@ fun MainScreen(isDarkMode: Boolean, onToggleTheme: () -> Unit) {
                             ) {
                                 DropdownMenuItem(
                                     text = { Text("Lockdown traffic", style = MaterialTheme.typography.bodyLarge) },
-                                    onClick = { showMenu = false },
-                                    trailingIcon = { Checkbox(checked = false, onCheckedChange = null) }
+                                    onClick = { 
+                                        coroutineScope.launch {
+                                            preferenceManager.setLockdown(!isLockdown)
+                                        }
+                                        showMenu = false 
+                                    },
+                                    trailingIcon = { Checkbox(checked = isLockdown, onCheckedChange = null) }
                                 )
                                 DropdownMenuItem(
                                     text = { Text("Show log", style = MaterialTheme.typography.bodyLarge) },
-                                    onClick = { showMenu = false },
-                                    leadingIcon = { Icon(Icons.Default.ShoppingCart, contentDescription = null, modifier = Modifier.size(20.dp)) }
+                                    onClick = { 
+                                        showMenu = false 
+                                        context.startActivity(Intent(context, LogActivity::class.java))
+                                    },
+                                    leadingIcon = { Icon(Icons.Default.List, contentDescription = null, modifier = Modifier.size(20.dp)) }
                                 )
                                 DropdownMenuItem(
                                     text = { Text("Settings", style = MaterialTheme.typography.bodyLarge) },
-                                    onClick = { showMenu = false }
+                                    onClick = { 
+                                        showMenu = false 
+                                        context.startActivity(Intent(context, SettingsActivity::class.java))
+                                    }
                                 )
                                 DropdownMenuItem(
-                                    text = { Text("Pro features", style = MaterialTheme.typography.bodyLarge) },
-                                    onClick = { showMenu = false },
-                                    leadingIcon = { Icon(Icons.Default.ShoppingCart, contentDescription = null, modifier = Modifier.size(20.dp)) }
+                                    text = { Text("Features", style = MaterialTheme.typography.bodyLarge) },
+                                    onClick = { 
+                                        showMenu = false 
+                                        context.startActivity(Intent(context, FeaturesActivity::class.java))
+                                    },
+                                    leadingIcon = { Icon(Icons.Default.Verified, contentDescription = null, modifier = Modifier.size(20.dp)) }
                                 )
                                 HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
                                 DropdownMenuItem(
                                     text = { Text("Legend", style = MaterialTheme.typography.bodyLarge) },
-                                    onClick = { showMenu = false }
+                                    onClick = { 
+                                        showLegend = true
+                                        showMenu = false 
+                                    }
                                 )
                                 DropdownMenuItem(
                                     text = { Text("Support", style = MaterialTheme.typography.bodyLarge) },
-                                    onClick = { showMenu = false }
+                                    onClick = { 
+                                        showSupport = true
+                                        showMenu = false 
+                                    }
                                 )
                                 DropdownMenuItem(
                                     text = { Text("About", style = MaterialTheme.typography.bodyLarge) },
-                                    onClick = { showMenu = false }
+                                    onClick = { 
+                                        showAbout = true
+                                        showMenu = false 
+                                    }
                                 )
                             }
                         }
@@ -336,6 +365,70 @@ fun MainScreen(isDarkMode: Boolean, onToggleTheme: () -> Unit) {
                 AppRuleItem(app, rule, onUpdate = { viewModel.updateRule(it) })
             }
         }
+    }
+
+    if (showLegend) {
+        AlertDialog(
+            onDismissRequest = { showLegend = false },
+            title = { Text("Legend") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(Icons.Default.Wifi, null, tint = Color(0xFF4CAF50))
+                        Spacer(modifier = Modifier.width(12.dp))
+                        Text("WiFi Allowed")
+                    }
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(Icons.Default.Wifi, null, tint = MaterialTheme.colorScheme.error)
+                        Spacer(modifier = Modifier.width(12.dp))
+                        Text("WiFi Blocked")
+                    }
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(Icons.Default.SignalCellularAlt, null, tint = Color(0xFF4CAF50))
+                        Spacer(modifier = Modifier.width(12.dp))
+                        Text("Mobile Allowed")
+                    }
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(Icons.Default.SignalCellularAlt, null, tint = MaterialTheme.colorScheme.error)
+                        Spacer(modifier = Modifier.width(12.dp))
+                        Text("Mobile Blocked")
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { showLegend = false }) { Text("Close") }
+            }
+        )
+    }
+
+    if (showSupport) {
+        AlertDialog(
+            onDismissRequest = { showSupport = false },
+            title = { Text("Support") },
+            text = {
+                Text("For any issues or feedback, please contact support@netzone.app or visit our GitHub repository.")
+            },
+            confirmButton = {
+                TextButton(onClick = { showSupport = false }) { Text("Close") }
+            }
+        )
+    }
+
+    if (showAbout) {
+        AlertDialog(
+            onDismissRequest = { showAbout = false },
+            title = { Text("About NetZone") },
+            text = {
+                Column {
+                    Text("Version 1.0.0")
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text("NetZone is a simple firewall application for Android, based on the sinkhole VPN approach.")
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { showAbout = false }) { Text("Close") }
+            }
+        )
     }
 }
 
@@ -513,38 +606,4 @@ fun formatTime(minutes: Int): String {
     val ampm = if (h >= 12) "PM" else "AM"
     val h12 = if (h % 12 == 0) 12 else h % 12
     return "%02d:%02d %s".format(h12, m, ampm)
-}
-
-@Composable
-private fun NetZoneTheme(isDark: Boolean = false, content: @Composable () -> Unit) {
-    val darkColorScheme = darkColorScheme(
-        primary = Color(0xFFA5C9FF),
-        onPrimary = Color(0xFF00325B),
-        primaryContainer = Color(0xFF00497E),
-        onPrimaryContainer = Color(0xFFD1E4FF),
-        secondary = Color(0xFFBCC7DB),
-        background = Color(0xFF1A1C1E),
-        surface = Color(0xFF1A1C1E),
-        surfaceVariant = Color(0xFF43474E),
-        onSurfaceVariant = Color(0xFFC3C7CF)
-    )
-
-    val lightColorScheme = lightColorScheme(
-        primary = Color(0xFF0061A4),
-        onPrimary = Color(0xFFFFFFFF),
-        primaryContainer = Color(0xFFD1E4FF),
-        onPrimaryContainer = Color(0xFF001D36),
-        secondary = Color(0xFF535F70),
-        background = Color(0xFFFDFCFF),
-        surface = Color(0xFFFDFCFF),
-        surfaceVariant = Color(0xFFDFE2EB),
-        onSurfaceVariant = Color(0xFF43474E)
-    )
-
-    val colors = if (isDark) darkColorScheme else lightColorScheme
-
-    MaterialTheme(
-        colorScheme = colors,
-        content = content
-    )
 }

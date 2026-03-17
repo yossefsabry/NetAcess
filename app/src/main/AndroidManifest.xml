@@ -26,12 +26,30 @@
         <activity
             android:name=".MainActivity"
             android:exported="true"
-            android:windowSoftInputMode="adjustResize">
+            android:theme="@style/Theme.NetZone">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+
+        <activity
+            android:name=".SettingsActivity"
+            android:exported="false"
+            android:label="Settings"
+            android:theme="@style/Theme.NetZone" />
+
+        <activity
+            android:name=".LogActivity"
+            android:exported="false"
+            android:label="Access Log"
+            android:theme="@style/Theme.NetZone" />
+
+        <activity
+            android:name=".FeaturesActivity"
+            android:exported="false"
+            android:label="App Features"
+            android:theme="@style/Theme.NetZone" />
 
         <service
             android:name=".NetZoneVpnService"

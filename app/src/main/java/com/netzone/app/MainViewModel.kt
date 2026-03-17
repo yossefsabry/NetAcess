@@ -11,7 +11,8 @@ import kotlinx.coroutines.launch
 class MainViewModel(
     private val repository: RuleRepository,
     private val packageManager: PackageManager,
-    private val appMetadataDao: AppMetadataDao
+    private val appMetadataDao: AppMetadataDao,
+    private val preferenceManager: PreferenceManager
 ) : ViewModel() {
     val rules: Flow<List<Rule>> = repository.getAllRulesFlow()
     
@@ -42,6 +43,13 @@ class MainViewModel(
 
     init {
         syncAppsInBackground()
+        
+        // Synchronize showOnlySystem with preferenceManager
+        viewModelScope.launch {
+            preferenceManager.manageSystemApps.collect {
+                showOnlySystem.value = it
+            }
+        }
     }
 
     private fun syncAppsInBackground() {
@@ -83,7 +91,9 @@ class MainViewModel(
     }
 
     fun toggleFilterSystem() {
-        showOnlySystem.value = !showOnlySystem.value
+        viewModelScope.launch {
+            preferenceManager.setManageSystemApps(!showOnlySystem.value)
+        }
     }
 
     fun updateRule(rule: Rule) {

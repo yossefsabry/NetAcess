@@ -5,10 +5,11 @@ import androidx.room.Database
 import androidx.room.Room
 import androidx.room.RoomDatabase
 
-@Database(entities = [Rule::class, AppMetadata::class], version = 3, exportSchema = false)
+@Database(entities = [Rule::class, AppMetadata::class, LogEntry::class], version = 3, exportSchema = false)
 abstract class AppDatabase : RoomDatabase() {
     abstract fun ruleDao(): RuleDao
     abstract fun appMetadataDao(): AppMetadataDao
+    abstract fun logDao(): LogDao
 
     companion object {
         @Volatile
@@ -21,7 +22,7 @@ abstract class AppDatabase : RoomDatabase() {
                     AppDatabase::class.java,
                     "netzone_database"
                 )
-                .fallbackToDestructiveMigration() // Migration for development
+                .fallbackToDestructiveMigration()
                 .build()
                 INSTANCE = instance
                 instance
