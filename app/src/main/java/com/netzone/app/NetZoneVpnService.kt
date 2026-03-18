@@ -461,6 +461,7 @@ class NetZoneVpnService : VpnService() {
             .setContentIntent(pendingIntent)
             .setPriority(NotificationCompat.PRIORITY_LOW)
             .setOngoing(true)
+            .setOnlyAlertOnce(true)
             .build()
     }
 
@@ -472,7 +473,7 @@ class NetZoneVpnService : VpnService() {
     private fun createNotificationChannel() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             val channel = NotificationChannel(
-                CHANNEL_ID, "Firewall Status", NotificationManager.IMPORTANCE_DEFAULT
+                CHANNEL_ID, "Firewall Status", NotificationManager.IMPORTANCE_LOW
             )
             val nm = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
             nm.createNotificationChannel(channel)
