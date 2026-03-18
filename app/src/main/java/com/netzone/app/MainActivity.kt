@@ -119,7 +119,7 @@ fun MainScreen(preferenceManager: PreferenceManager, isDarkMode: Boolean, onTogg
             @Suppress("UNCHECKED_CAST")
             override fun <T : ViewModel> create(modelClass: Class<T>): T {
                 if (modelClass.isAssignableFrom(MainViewModel::class.java)) {
-                    return MainViewModel(repository, context.packageManager, db.appMetadataDao(), preferenceManager) as T
+                    return MainViewModel(repository, context.packageManager, db.appMetadataDao(), preferenceManager, db.logDao()) as T
                 }
                 throw IllegalArgumentException("Unknown ViewModel class")
             }
