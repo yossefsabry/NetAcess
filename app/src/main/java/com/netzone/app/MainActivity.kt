@@ -67,26 +67,39 @@ class MainActivity : ComponentActivity() {
         }
 
         setContent {
-            val systemInDark = isSystemInDarkTheme()
-            val isDarkMode by preferenceManager.isDarkMode.collectAsStateWithLifecycle(initialValue = systemInDark)
+            val isDarkModePref by produceState<Boolean?>(initialValue = null) {
+                preferenceManager.isDarkMode.collect { value = it }
+            }
             val coroutineScope = rememberCoroutineScope()
+            val systemInDark = isSystemInDarkTheme()
+            
+            // If the preference is not loaded yet, use the system theme as a fallback, 
+            // but ensure we don't flash light if the user is in a dark environment.
+            val isDarkMode = isDarkModePref ?: systemInDark
 
             LaunchedEffect(isDarkMode) {
-                ThemeTransitionController.attachIfPending(this@MainActivity)
+                if (isDarkModePref != null) {
+                    ThemeTransitionController.attachIfPending(this@MainActivity)
+                }
             }
 
             NetZoneTheme(isDark = isDarkMode) {
-                Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
-                    MainScreen(
-                        preferenceManager = preferenceManager,
-                        isDarkMode = isDarkMode,
-                        onToggleTheme = {
-                            coroutineScope.launch {
-                                ThemeTransitionController.prepareTransition(this@MainActivity, !isDarkMode)
-                                preferenceManager.setDarkMode(!isDarkMode)
+                Surface(
+                    modifier = Modifier.fillMaxSize(), 
+                    color = if (isDarkModePref == null) Color(0xFF1A1C1E) else MaterialTheme.colorScheme.background
+                ) {
+                    if (isDarkModePref != null) {
+                        MainScreen(
+                            preferenceManager = preferenceManager,
+                            isDarkMode = isDarkMode,
+                            onToggleTheme = {
+                                coroutineScope.launch {
+                                    ThemeTransitionController.prepareTransition(this@MainActivity, !isDarkMode)
+                                    preferenceManager.setDarkMode(!isDarkMode)
+                                }
                             }
-                        }
-                    )
+                        )
+                    }
                 }
             }
         }
