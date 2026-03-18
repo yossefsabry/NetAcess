@@ -20,10 +20,25 @@ class VpnScheduler : BroadcastReceiver() {
 
     companion object {
         fun reloadVpn(context: Context) {
-            val vpnIntent = Intent(context, NetZoneVpnService::class.java)
-            context.startService(vpnIntent)
+            // Avoid infinite loop when called from service's onStartCommand
+            if (context !is NetZoneVpnService) {
+                val vpnIntent = Intent(context, NetZoneVpnService::class.java)
+                context.startService(vpnIntent)
+            }
             
             scheduleNextAlarm(context)
+        }
+
+        fun cancelAlarm(context: Context) {
+            val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
+            val intent = Intent(context, VpnScheduler::class.java).apply {
+                action = "com.netzone.app.UPDATE_VPN"
+            }
+            val pendingIntent = PendingIntent.getBroadcast(
+                context, 0, intent,
+                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+            )
+            alarmManager.cancel(pendingIntent)
         }
 
         private fun scheduleNextAlarm(context: Context) {

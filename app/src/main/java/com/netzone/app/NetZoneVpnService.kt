@@ -136,11 +136,13 @@ class NetZoneVpnService : VpnService() {
             stopVpn()
             return START_NOT_STICKY
         }
+        VpnScheduler.reloadVpn(this)
         debounceReload()
         return START_STICKY
     }
 
     private fun stopVpn() {
+        VpnScheduler.cancelAlarm(this)
         drainJob?.cancel()
         drainJob = null
         vpnInterface?.close()
