@@ -156,11 +156,11 @@ fun MainScreen(preferenceManager: PreferenceManager, isDarkMode: Boolean, onTogg
                         Row(
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Image(
-                                painter = painterResource(R.drawable.netzone_launcher_foreground),
-                                contentDescription = "NetZone icon",
-                                modifier = Modifier.size(50.dp)
-                            )
+                            // Image(
+                            //     painter = painterResource(R.drawable.netzone_launcher_foreground),
+                            //     contentDescription = "NetZone icon",
+                            //     modifier = Modifier.size(50.dp)
+                            // )
                             Spacer(modifier = Modifier.width(8.dp))
                             Text(
                                 "NZ",
@@ -324,6 +324,16 @@ fun MainScreen(preferenceManager: PreferenceManager, isDarkMode: Boolean, onTogg
                     modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
                     placeholder = { Text("Search apps...") },
                     leadingIcon = { Icon(Icons.Default.Search, null) },
+                    trailingIcon = {
+                        if (searchQuery.isNotEmpty()) {
+                            IconButton(
+                                onClick = { viewModel.onSearchQueryChange("") },
+                                modifier = Modifier.padding(end = 8.dp)
+                            ) {
+                                Icon(Icons.Default.Close, contentDescription = "Clear search")
+                            }
+                        }
+                    },
                     singleLine = true,
                     shape = androidx.compose.foundation.shape.RoundedCornerShape(24.dp),
                     colors = OutlinedTextFieldDefaults.colors(
