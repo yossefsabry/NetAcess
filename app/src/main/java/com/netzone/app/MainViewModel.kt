@@ -12,34 +12,76 @@ class MainViewModel(
     private val repository: RuleRepository,
     private val packageManager: PackageManager,
     private val appMetadataDao: AppMetadataDao,
-    private val preferenceManager: PreferenceManager
+    private val preferenceManager: PreferenceManager,
+    private val logDao: LogDao
 ) : ViewModel() {
     val rules: Flow<List<Rule>> = repository.getAllRulesFlow()
     
     val searchQuery = MutableStateFlow("")
     val showOnlyBlocked = MutableStateFlow(false)
     val showOnlySystem = MutableStateFlow(true)
+    val sortMode: Flow<AppSortMode> = preferenceManager.appSortMode
+
+    private data class FilterState(
+        val query: String,
+        val blockedOnly: Boolean,
+        val systemOnly: Boolean,
+        val mode: AppSortMode,
+        val recentPackages: List<String>
+    )
 
     // Reactive filtering pipeline
     val filteredApps: StateFlow<List<AppMetadata>> = combine(
         appMetadataDao.getAllApps(),
-        searchQuery,
-        showOnlyBlocked,
-        showOnlySystem,
+        combine(
+            searchQuery,
+            showOnlyBlocked,
+            showOnlySystem,
+            sortMode,
+            logDao.getRecentPackageNames(System.currentTimeMillis() - 10 * 60 * 1000)
+        ) { query, blocked, system, mode, recent ->
+            FilterState(query, blocked, system, mode, recent)
+        },
         repository.rulesMap
-    ) { apps, query, blockedOnly, systemOnly, rulesMap ->
+    ) { apps, filters, rulesMap ->
         apps.filter { app ->
-            val matchesSearch = query.isEmpty() || app.name.contains(query, ignoreCase = true) || 
-                             app.packageName.contains(query, ignoreCase = true)
-            val matchesSystem = systemOnly || !app.isSystem
+            val matchesSearch = filters.query.isEmpty() || app.name.contains(filters.query, ignoreCase = true) || 
+                             app.packageName.contains(filters.query, ignoreCase = true)
+            val matchesSystem = filters.systemOnly || !app.isSystem
             
             val rule = rulesMap[app.packageName]
             val isBlocked = rule != null && (rule.wifiBlocked || rule.mobileBlocked || rule.isScheduleEnabled)
-            val matchesBlocked = !blockedOnly || isBlocked
+            val matchesBlocked = !filters.blockedOnly || isBlocked
             
             matchesSearch && matchesSystem && matchesBlocked
+        }.let { filtered ->
+            when (filters.mode) {
+                AppSortMode.NAME -> filtered.sortedBy { it.name }
+                AppSortMode.UID -> filtered.sortedBy { it.uid }
+                AppSortMode.SMART -> {
+                    sortSmart(filtered, rulesMap, filters.recentPackages)
+                }
+            }
         }
-    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+    }.flowOn(Dispatchers.Default)
+    .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    companion object {
+        fun sortSmart(
+            apps: List<AppMetadata>,
+            rulesMap: Map<String, Rule>,
+            recentPackages: List<String>
+        ): List<AppMetadata> {
+            return apps.sortedWith(
+                compareByDescending<AppMetadata> { app ->
+                    val rule = rulesMap[app.packageName]
+                    rule != null && (rule.wifiBlocked || rule.mobileBlocked || rule.isScheduleEnabled)
+                }.thenByDescending { app ->
+                    recentPackages.contains(app.packageName)
+                }.thenBy { it.name }
+            )
+        }
+    }
 
     init {
         syncAppsInBackground()
@@ -99,6 +141,12 @@ class MainViewModel(
     fun updateRule(rule: Rule) {
         viewModelScope.launch {
             repository.updateRule(rule)
+        }
+    }
+
+    fun setSortMode(mode: AppSortMode) {
+        viewModelScope.launch {
+            preferenceManager.setAppSortMode(mode)
         }
     }
 }
