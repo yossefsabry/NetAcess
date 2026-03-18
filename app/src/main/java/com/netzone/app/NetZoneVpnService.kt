@@ -255,33 +255,23 @@ class NetZoneVpnService : VpnService() {
         }
     }
 
-    private fun updateVpn(blockedPackages: List<String>) {
+    private suspend fun updateVpn(blockedPackages: List<String>) {
         val blockedSet = blockedPackages.toSet()
-        val customDns = runBlocking { preferenceManager.customDns.first() }
+        val customDns = preferenceManager.customDns.first()
 
         if (vpnInterface != null && blockedSet == lastBlockedPackages) {
             return
         }
 
-        // Stop existing drain and close old interface
-        drainJob?.cancel()
-        drainJob = null
-        vpnInterface?.close()
-        vpnInterface = null
-        lastBlockedPackages = blockedSet
-
-        if (blockedSet.isEmpty()) {
-            updateNotification("Firewall active: 0 apps blocked")
-            return
-        }
+        // Delay closing old interface and cancelling drainJob for atomic handover
+        val oldInterface = vpnInterface
+        val oldDrainJob = drainJob
 
         try {
             val builder = Builder()
                 .setSession("NetZone")
                 .addAddress("10.0.0.2", 32)
                 .addAddress("fd00:1::2", 128)
-                .addRoute("0.0.0.0", 0)
-                .addRoute("::", 0)
                 .setMtu(1500)
 
             // Apply custom DNS
@@ -305,12 +295,23 @@ class NetZoneVpnService : VpnService() {
                 Log.w(TAG, "Could not exclude self from VPN: ${e.message}")
             }
 
-            for (pkg in blockedSet) {
-                try {
-                    builder.addAllowedApplication(pkg)
-                } catch (e: Exception) {
-                    Log.e(TAG, "App $pkg not found, skipping")
+            // Only add routes and allowed apps if we have apps to block.
+            // If empty, the VPN interface is still established but no traffic is routed to it.
+            // This maintains the VPN session and allows for a seamless handover when apps
+            // are subsequently blocked/unblocked.
+            if (blockedSet.isNotEmpty()) {
+                builder.addRoute("0.0.0.0", 0)
+                builder.addRoute("::", 0)
+
+                for (pkg in blockedSet) {
+                    try {
+                        builder.addAllowedApplication(pkg)
+                    } catch (e: Exception) {
+                        Log.e(TAG, "App $pkg not found, skipping")
+                    }
                 }
+            } else {
+                Log.i(TAG, "Establishing VPN with 0 blocked apps (transparent mode)")
             }
 
             // Add configure intent so tapping notification opens the app
@@ -321,25 +322,37 @@ class NetZoneVpnService : VpnService() {
             )
             builder.setConfigureIntent(pendingIntent)
 
-            vpnInterface = builder.establish()
+            val newInterface = builder.establish()
 
-            if (vpnInterface != null) {
-                // Start draining packets from the tunnel to prevent buffer overflow.
-                // Without this, Android kills the VPN service when the fd buffer fills.
+            if (newInterface != null) {
+                // Handover: Update references and start new drain job
+                vpnInterface = newInterface
+                lastBlockedPackages = blockedSet
+                
+                // Start new drain job first
                 drainJob = serviceScope.launch {
-                    drainTunnel(vpnInterface!!)
+                    drainTunnel(newInterface)
                 }
-                updateNotification("Firewall active: ${blockedSet.size} apps blocked")
-                Log.i(TAG, "VPN established, blocking ${blockedSet.size} apps")
+
+                // Clean up old resources after handover is complete
+                oldDrainJob?.cancel()
+                oldInterface?.close()
+
+                val notificationText = if (blockedSet.isEmpty()) {
+                    "Firewall active: 0 apps blocked"
+                } else {
+                    "Firewall active: ${blockedSet.size} apps blocked"
+                }
+                updateNotification(notificationText)
+                Log.i(TAG, "VPN established (atomic), blocking ${blockedSet.size} apps")
             } else {
                 Log.e(TAG, "VPN establish() returned null — user may not have granted permission")
                 updateNotification("Firewall: waiting for VPN permission")
-                lastBlockedPackages = null
+                // Keep the old one if it still exists
             }
         } catch (e: Exception) {
             Log.e(TAG, "Failed to start VPN", e)
             updateNotification("Firewall Error: ${e.message}")
-            lastBlockedPackages = null
         }
     }
 
