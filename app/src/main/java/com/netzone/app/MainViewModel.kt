@@ -59,19 +59,29 @@ class MainViewModel(
                 AppSortMode.NAME -> filtered.sortedBy { it.name }
                 AppSortMode.UID -> filtered.sortedBy { it.uid }
                 AppSortMode.SMART -> {
-                    filtered.sortedWith(
-                        compareByDescending<AppMetadata> { app ->
-                            val rule = rulesMap[app.packageName]
-                            rule != null && (rule.wifiBlocked || rule.mobileBlocked || rule.isScheduleEnabled)
-                        }.thenByDescending { app ->
-                            filters.recentPackages.contains(app.packageName)
-                        }.thenBy { it.name }
-                    )
+                    sortSmart(filtered, rulesMap, filters.recentPackages)
                 }
             }
         }
     }.flowOn(Dispatchers.Default)
     .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    companion object {
+        fun sortSmart(
+            apps: List<AppMetadata>,
+            rulesMap: Map<String, Rule>,
+            recentPackages: List<String>
+        ): List<AppMetadata> {
+            return apps.sortedWith(
+                compareByDescending<AppMetadata> { app ->
+                    val rule = rulesMap[app.packageName]
+                    rule != null && (rule.wifiBlocked || rule.mobileBlocked || rule.isScheduleEnabled)
+                }.thenByDescending { app ->
+                    recentPackages.contains(app.packageName)
+                }.thenBy { it.name }
+            )
+        }
+    }
 
     init {
         syncAppsInBackground()
