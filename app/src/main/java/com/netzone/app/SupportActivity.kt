@@ -98,7 +98,7 @@ fun SupportScreen(
                 title = "Report a Bug",
                 description = "Help us improve by reporting issues.",
                 icon = Icons.Default.BugReport,
-                onClick = { onWebClick("https://github.com/yossef/netzone/issues") }
+                onClick = { onWebClick("https://github.com/yossefsabry/netzone/issues") }
             )
 
             Spacer(modifier = Modifier.height(12.dp))
@@ -107,7 +107,7 @@ fun SupportScreen(
                 title = "Documentation",
                 description = "Learn how to use NetZone features.",
                 icon = Icons.Default.Description,
-                onClick = { onWebClick("https://github.com/yossef/netzone#readme") }
+                onClick = { onWebClick("https://github.com/yossefsabry/netzone#readme") }
             )
 
             Spacer(modifier = Modifier.height(32.dp))

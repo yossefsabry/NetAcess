@@ -404,9 +404,11 @@ class NetZoneVpnService : VpnService() {
 
     private fun logConnection(packet: ParsedPacket) {
         serviceScope.launch(Dispatchers.IO) {
-            // Heuristic: log which app is likely sending to the sinkhole
+            // Heuristic: log which app is likely sending to the sinkhole.
+            // Only consider apps that are enabled and currently targeted for blocking.
+            val blocked = lastBlockedPackages ?: emptySet()
             val rules = repository.rulesMap.value.values
-            val possibleApp = rules.firstOrNull { it.wifiBlocked || it.mobileBlocked || it.isScheduleEnabled }
+            val possibleApp = rules.firstOrNull { it.isEnabled && it.packageName in blocked }
             
             logDao.insert(LogEntry(
                 packageName = possibleApp?.packageName ?: "Unknown",

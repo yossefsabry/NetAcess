@@ -40,7 +40,7 @@ class AboutActivity : ComponentActivity() {
                 AboutScreen(
                     onBack = { finish() },
                     onGitHubClick = {
-                        val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://github.com/yossef/netzone"))
+                        val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://github.com/yossefsabry/netzone"))
                         startActivity(intent)
                     }
                 )
