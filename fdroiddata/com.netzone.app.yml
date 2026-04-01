@@ -2,10 +2,10 @@ Categories:
   - Internet
   - Security
 License: MIT
-WebSite: https://github.com/yossefsabry/NetAcess
-SourceCode: https://github.com/yossefsabry/NetAcess
-IssueTracker: https://github.com/yossefsabry/NetAcess/issues
-Changelog: https://github.com/yossefsabry/NetAcess/releases
+WebSite: https://github.com/yossefsabry/netzone
+SourceCode: https://github.com/yossefsabry/netzone
+IssueTracker: https://github.com/yossefsabry/netzone/issues
+Changelog: https://github.com/yossefsabry/netzone/releases
 
 AutoName: NetZone
 Summary: Non-root firewall with per-app network controls
@@ -23,7 +23,7 @@ Description: |-
   used only to power firewall rules and scheduling behavior.
 
 RepoType: git
-Repo: https://github.com/yossefsabry/NetAcess.git
+Repo: https://github.com/yossefsabry/netzone.git
 
 Builds:
   - versionName: 1.1.0
@@ -31,8 +31,9 @@ Builds:
     commit: v1.1.0
     gradle:
       - yes
+    output: app/build/outputs/apk/release/app-release-unsigned.apk
 
-AutoUpdateMode: Version v%v
+AutoUpdateMode: None
 UpdateCheckMode: Tags ^v[0-9].*$
 CurrentVersion: 1.1.0
 CurrentVersionCode: 2
